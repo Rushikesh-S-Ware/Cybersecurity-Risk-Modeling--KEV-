@@ -1,0 +1,28 @@
+{
+    "id": "E4342458",
+    "path": null,
+    "project_path": null,
+    "type": "object_explorer",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1742513326915.0,
+    "source_on_save": false,
+    "relative_order": 5,
+    "properties": {
+        "id": "f3df5e3e6fea472ab2861049a76932c2",
+        "name": "pca_summary",
+        "title": "pca_summary",
+        "language": "R",
+        "source_window_id": "",
+        "Source": "Source"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 2322206432585609839,
+    "encoding": "",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1742513326915,
+    "read_only": false,
+    "read_only_alternatives": []
+}

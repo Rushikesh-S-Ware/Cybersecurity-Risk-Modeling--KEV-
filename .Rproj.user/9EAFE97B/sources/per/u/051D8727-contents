@@ -1,0 +1,109 @@
+# Load necessary libraries
+library(readr)
+library(dplyr)
+library(caret)
+
+# Load the dataset
+data <- read_csv("Cleaned_Dataset.csv")
+
+# Select a manageable set of variables for modeling
+selected_vars <- c("cisa_kev", "base_score", "exploitability_score", "impact_score", 
+                   "epss_score", "epss_perc", "attack_vector", "attack_complexity", 
+                   "privileges_required", "user_interaction", "scope", 
+                   "confidentiality_impact", "integrity_impact", "availability_impact")
+data_subset <- data[, selected_vars]
+
+# Instead of dropping rows with missing values, we impute them:
+# Check missing values before imputation
+print(sapply(data_subset, function(x) sum(is.na(x))))
+
+# Use caret's preProcess with "medianImpute" (for numeric variables)
+impute_mod <- preProcess(data_subset, method = "medianImpute")
+data_imputed <- predict(impute_mod, newdata = data_subset)
+
+# Verify that missing values are now handled
+print(sapply(data_imputed, function(x) sum(is.na(x))))
+
+# Convert the target variable to a factor with levels "Yes" and "No"
+data_imputed$cisa_kev <- factor(ifelse(data_imputed$cisa_kev, "Yes", "No"), levels = c("Yes", "No"))
+
+# Print the distribution of the target variable to check the number of positive cases
+table(data_imputed$cisa_kev)
+
+
+# Define the numeric variables for PCA
+numeric_vars <- c("base_score", "exploitability_score", "impact_score", "epss_score", "epss_perc")
+
+# Perform PCA on these numeric predictors from the imputed dataset
+pca_mod <- prcomp(data_imputed[, numeric_vars], center = TRUE, scale. = TRUE)
+
+# Print summary of the PCA results (variance explained by each principal component)
+pca_summary <- summary(pca_mod)
+print(pca_summary)
+
+# Plot a scree plot to visualize the variance explained
+plot(pca_mod, type = "l")
+
+# Exclude columns that are not useful for modeling (identifiers and dates)
+cols_to_exclude <- c("cve_id", "published_date", "date", "time")
+data_for_pca <- data_imputed[, !(names(data_imputed) %in% cols_to_exclude)]
+
+# Also remove the target variable from the predictors
+data_for_pca <- data_for_pca[, !(names(data_for_pca) %in% c("cisa_kev"))]
+
+# Convert all non-numeric variables (i.e., character/factors) into dummy variables
+# 'fullRank = TRUE' ensures we avoid dummy variable trap (collinearity)
+library(caret)
+dummies_model <- dummyVars(" ~ .", data = data_for_pca, fullRank = TRUE)
+pca_matrix <- predict(dummies_model, newdata = data_for_pca)
+
+# Perform PCA on the entire predictor matrix
+pca_all <- prcomp(pca_matrix, center = TRUE, scale. = TRUE)
+
+# Summarize the PCA results to see variance explained
+pca_summary <- summary(pca_all)
+print(pca_summary)
+
+# Plot a scree plot to visualize the variance explained by the components
+plot(pca_all, type = "l")
+
+# Extract the first 7 principal components from the full PCA (pca_all)
+pca_data <- as.data.frame(pca_all$x[, 1:7])
+colnames(pca_data) <- paste0("PC", 1:7)
+
+# Combine the target variable from the imputed dataset with the PCs
+model_data <- cbind(cisa_kev = data_imputed$cisa_kev, pca_data)
+
+# Convert cisa_kev to a character, then to a factor with levels "Yes" and "No"
+model_data$cisa_kev <- factor(as.character(model_data$cisa_kev), levels = c("Yes", "No"))
+
+# Verify the target variable conversion
+print(table(model_data$cisa_kev))
+
+# Split the data into training (70%) and testing (30%) sets
+set.seed(123)
+index <- createDataPartition(model_data$cisa_kev, p = 0.7, list = FALSE)
+train_model_data <- model_data[index, ]
+test_model_data  <- model_data[-index, ]
+
+# Build a baseline logistic regression model using the 7 PCs
+library(caret)
+set.seed(123)
+baseline_pca_model <- train(
+  cisa_kev ~ .,
+  data = train_model_data,
+  method = "glm",
+  family = "binomial",
+  trControl = trainControl(
+    method = "cv",
+    number = 5,
+    summaryFunction = twoClassSummary,
+    classProbs = TRUE
+  ),
+  metric = "ROC"
+)
+
+print(baseline_pca_model)
+
+
+
